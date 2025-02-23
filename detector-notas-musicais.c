@@ -4,17 +4,19 @@
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
 #include "hardware/clocks.h"
+#include "hardware/timer.h"
 #include "libs/notas.h"
 #include "libs/ssd1306.h"
 #include "libs/leds.h"
 #include "libs/animation.h"
+#include "libs/buzzer.h"
 #include "pio_matrix.pio.h"
 #include "pico/bootrom.h"
 
 #define SAMPLE_RATE 44100
 #define SAMPLES 1024
 #define MIC_PIN 28
-#define BUZZER_PIN 22
+#define VX_PIN 27
 #define I2C_PORT i2c1
 #define I2C_SDA 14
 #define I2C_SCL 15
@@ -27,6 +29,7 @@ ssd1306_t ssd;
 uint last_interrupt_a = 0;
 uint last_interrupt_b = 0;
 uint DEBOUNCE_MS = 200;
+bool buzzer_enabled = false;
 
 enum TELAS
 {
@@ -35,9 +38,12 @@ enum TELAS
     TOCAR
 };
 
-uint tela_atual = 0;
+uint tela_atual = MENU;
 float freq_dominante = 0;
 char *nota = "##";
+volatile uint nota_selecionada = 0;
+struct repeating_timer timer;
+
 PIO pio;
 uint sm;
 
@@ -52,15 +58,18 @@ void enable_interrupt();
 void menu();
 void display_character(char ch);
 void PIO_setup(PIO *pio, uint *sm);
-
+bool joystick_callback(struct repeating_timer *t);
+bool i2c_recovery();
 int main()
 {
     stdio_init_all();
     adc_init();
     adc_gpio_init(MIC_PIN);
+    adc_gpio_init(VX_PIN);
     setup_display();
     PIO_setup(&pio, &sm);
-
+    add_repeating_timer_ms(100, joystick_callback, NULL, &timer);
+    initialization_buzzers(BUZZER_A, BUZZER_B);
     float real[SAMPLES], imag[SAMPLES];
 
     while (true)
@@ -103,9 +112,15 @@ int main()
 
         freq_dominante = interpolar_pico(freq_index, magnitudes) * SAMPLE_RATE / SAMPLES;
         nota = detectar_nota(freq_dominante);
-        draw_note(pio, sm, nota);
         printf("🎶 Frequência: %.2f Hz - Nota: %s\n", freq_dominante, nota);
-        // buzzer_pwm(BUZZER_PIN, (uint16_t)freq_dominante, 500);
+
+        if (tela_atual == TOCAR && buzzer_enabled)
+        {
+            buzzer_pwm(BUZZER_A, (uint16_t)frequencias_base[60 + nota_selecionada], 500);
+            printf("🎶 Tocando: %s (%.2f Hz)\n", notas[nota_selecionada], frequencias_base[60 + nota_selecionada]);
+
+            buzzer_enabled = false;
+        }
 
         sleep_ms(500);
     }
@@ -192,43 +207,52 @@ float interpolar_pico(int k, float *magnitudes)
     float ajuste = (alpha - gamma) / (2.0 * (alpha - 2.0 * beta + gamma));
     return k + ajuste;
 }
-
-void buzzer_pwm(uint gpio, uint16_t frequency, uint16_t duration_ms)
+bool i2c_recovery()
 {
-    if (frequency == 0)
-        return;
+    gpio_set_function(I2C_SDA, GPIO_FUNC_SIO);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_SIO);
 
-    gpio_set_function(gpio, GPIO_FUNC_PWM);
+    gpio_set_dir(I2C_SDA, GPIO_IN);
+    gpio_set_dir(I2C_SCL, GPIO_OUT);
 
-    uint slice = pwm_gpio_to_slice_num(gpio);
-    uint channel = pwm_gpio_to_channel(gpio);
+    for (int i = 0; i < 9; i++) // 9 ciclos para liberar o barramento
+    {
+        gpio_put(I2C_SCL, 1);
+        sleep_us(10);
+        gpio_put(I2C_SCL, 0);
+        sleep_us(10);
+    }
 
-    float clock_div = 4.0f;
-    pwm_set_clkdiv(slice, clock_div);
+    gpio_set_dir(I2C_SDA, GPIO_OUT);
+    gpio_put(I2C_SDA, 1);
+    sleep_us(10);
+    gpio_put(I2C_SCL, 1);
+    sleep_us(10);
 
-    uint32_t wrap_value = (125000000 / (clock_div * frequency)) - 1;
-    pwm_set_wrap(slice, wrap_value);
-    pwm_set_chan_level(slice, channel, wrap_value / 2);
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
 
-    pwm_set_enabled(slice, true);
-    sleep_ms(duration_ms);
-
-    pwm_set_enabled(slice, false);
-    gpio_set_function(gpio, GPIO_FUNC_SIO);
-    gpio_set_dir(gpio, GPIO_OUT);
-    gpio_put(gpio, 0);
+    return true;
 }
-
 void setup_display()
 {
-    // Inicializa a I2c
+    i2c_recovery();
+
     i2c_init(I2C_PORT, 400 * 1000);
 
     gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
     gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
     gpio_pull_up(I2C_SDA);
     gpio_pull_up(I2C_SCL);
-    ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
+
+    int retries = 3;
+    while (retries--)
+    {
+        ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
+
+        break;
+    }
+
     ssd1306_config(&ssd);
     ssd1306_send_data(&ssd);
 
@@ -237,6 +261,7 @@ void setup_display()
 }
 
 void display_character(char ch);
+void selecionar_nota();
 
 void menu()
 {
@@ -261,13 +286,16 @@ void menu()
         ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
         ssd1306_draw_string(&ssd, "DETECTANDO:", 8, 8);
         ssd1306_draw_string(&ssd, mensagem, 8, 24);
+
         ssd1306_draw_string(&ssd, nota_mensagem, 8, 32);
         ssd1306_draw_string(&ssd, "[A] Para Voltar", 8, 48);
+
+        draw_note(pio, sm, nota);
     }
     else if (tela_atual == TOCAR)
     {
         ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
-        ssd1306_draw_string(&ssd, "Tocando...", 8, 8);
+        selecionar_nota();
     }
 
     ssd1306_send_data(&ssd);
@@ -289,6 +317,7 @@ void gpio_irq_handler(uint gpio, uint32_t events)
         if (current_time - last_interrupt_a > DEBOUNCE_MS)
         {
             last_interrupt_a = current_time;
+
             if (tela_atual == MENU)
             {
                 tela_atual = DETECTAR;
@@ -301,16 +330,20 @@ void gpio_irq_handler(uint gpio, uint32_t events)
     }
     if (gpio == BUTTON_B)
     {
-        reset_usb_boot(0, 0);
-        // if (current_time - last_interrupt_b > DEBOUNCE_MS)
-        // {
-        //     last_interrupt_b = current_time;
+        if (current_time - last_interrupt_b > DEBOUNCE_MS)
+        {
+            last_interrupt_b = current_time;
+            buzzer_enabled = !buzzer_enabled;
 
-        //     if (tela_atual == MENU)
-        //     {
-        //         tela_atual = TOCAR;
-        //     }
-        // }
+            if (tela_atual == MENU)
+            {
+                tela_atual = TOCAR;
+            }
+            else if (tela_atual == TOCAR)
+            {
+                buzzer_enabled = true;
+            }
+        }
     }
 }
 
@@ -341,4 +374,45 @@ void PIO_setup(PIO *pio, uint *sm)
     uint offset = pio_add_program(*pio, &pio_matrix_program);
     *sm = pio_claim_unused_sm(*pio, true);
     pio_matrix_program_init(*pio, *sm, offset, LED_PIN);
+}
+
+void selecionar_nota()
+{
+    ssd1306_fill(&ssd, false);
+    ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
+    ssd1306_draw_string(&ssd, "Selecione uma", 8, 8);
+    ssd1306_draw_string(&ssd, "nota", 8, 16);
+    ssd1306_draw_string(&ssd, "com o Joystick:", 8, 24);
+
+    draw_note(pio, sm, notas[nota_selecionada]);
+    ssd1306_draw_string(&ssd, notas[nota_selecionada], 8, 40);
+    ssd1306_send_data(&ssd);
+}
+
+bool joystick_callback(struct repeating_timer *t)
+{
+
+    if (tela_atual == TOCAR)
+    {
+
+        const int limiar_esquerda = 1500; // Define limite para esquerda
+        const int limiar_direita = 2500;  // Define limite para direita
+        adc_select_input(1);
+        int adc_value = adc_read();
+
+        if (adc_value < limiar_esquerda)
+        {
+            nota_selecionada = (nota_selecionada - 1 + 12) % 12;
+            selecionar_nota();
+            buzzer_enabled = false;
+        }
+        else if (adc_value > limiar_direita)
+        {
+            nota_selecionada = (nota_selecionada + 1) % 12;
+            selecionar_nota();
+            buzzer_enabled = false;
+        }
+    }
+
+    return true;
 }

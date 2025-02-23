@@ -124,7 +124,7 @@ void draw_number(PIO pio, uint sm, uint index, bool random_colors)
     draw_pio(numbers[index], pio, sm, .2);
 }
 
-void draw_note(PIO pio, uint sm, char *note)
+void draw_note(PIO pio, uint sm, const char *note)
 {
     pixel red = {255, 0, 0}, black = {0, 0, 0}, blue = {0, 0, 255};
     const char *notas[] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
