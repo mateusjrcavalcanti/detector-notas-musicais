@@ -43,6 +43,7 @@ void setup_button(uint gpio);
 void gpio_irq_handler(uint gpio, uint32_t events);
 void enable_interrupt();
 void menu();
+void display_character(char ch);
 
 int main()
 {
@@ -226,6 +227,8 @@ void setup_display()
     ssd1306_send_data(&ssd);
 }
 
+void display_character(char ch);
+
 void menu()
 {
     ssd1306_fill(&ssd, false);
@@ -305,4 +308,18 @@ void enable_interrupt()
 {
     gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
     gpio_set_irq_enabled(BUTTON_B, GPIO_IRQ_EDGE_FALL, true);
+}
+
+void display_character(char ch)
+{
+    ssd1306_fill(&ssd, false);
+    ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
+
+    char string[2] = {ch, '\0'};
+
+    ssd1306_draw_string(&ssd, "Caractere lido", 8, 10);
+    ssd1306_draw_string(&ssd, string, 50, 25);
+
+    ssd1306_send_data(&ssd);
+    sleep_ms(1000);
 }
