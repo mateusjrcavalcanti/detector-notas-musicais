@@ -3,8 +3,13 @@
 #include "pico/stdlib.h"
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
+#include "hardware/clocks.h"
 #include "libs/notas.h"
 #include "libs/ssd1306.h"
+#include "libs/leds.h"
+#include "libs/animation.h"
+#include "pio_matrix.pio.h"
+#include "pico/bootrom.h"
 
 #define SAMPLE_RATE 44100
 #define SAMPLES 1024
@@ -33,6 +38,8 @@ enum TELAS
 uint tela_atual = 0;
 float freq_dominante = 0;
 char *nota = "##";
+PIO pio;
+uint sm;
 
 void fft(float *real, float *imag, int n);
 const char *detectar_nota(float freq);
@@ -44,6 +51,7 @@ void gpio_irq_handler(uint gpio, uint32_t events);
 void enable_interrupt();
 void menu();
 void display_character(char ch);
+void PIO_setup(PIO *pio, uint *sm);
 
 int main()
 {
@@ -51,6 +59,7 @@ int main()
     adc_init();
     adc_gpio_init(MIC_PIN);
     setup_display();
+    PIO_setup(&pio, &sm);
 
     float real[SAMPLES], imag[SAMPLES];
 
@@ -94,9 +103,9 @@ int main()
 
         freq_dominante = interpolar_pico(freq_index, magnitudes) * SAMPLE_RATE / SAMPLES;
         nota = detectar_nota(freq_dominante);
-
+        draw_note(pio, sm, nota);
         printf("🎶 Frequência: %.2f Hz - Nota: %s\n", freq_dominante, nota);
-        buzzer_pwm(BUZZER_PIN, (uint16_t)freq_dominante, 500);
+        // buzzer_pwm(BUZZER_PIN, (uint16_t)freq_dominante, 500);
 
         sleep_ms(500);
     }
@@ -292,15 +301,16 @@ void gpio_irq_handler(uint gpio, uint32_t events)
     }
     if (gpio == BUTTON_B)
     {
-        if (current_time - last_interrupt_b > DEBOUNCE_MS)
-        {
-            last_interrupt_b = current_time;
+        reset_usb_boot(0, 0);
+        // if (current_time - last_interrupt_b > DEBOUNCE_MS)
+        // {
+        //     last_interrupt_b = current_time;
 
-            if (tela_atual == MENU)
-            {
-                tela_atual = TOCAR;
-            }
-        }
+        //     if (tela_atual == MENU)
+        //     {
+        //         tela_atual = TOCAR;
+        //     }
+        // }
     }
 }
 
@@ -322,4 +332,13 @@ void display_character(char ch)
 
     ssd1306_send_data(&ssd);
     sleep_ms(1000);
+}
+
+void PIO_setup(PIO *pio, uint *sm)
+{
+    // configurações da PIO
+    *pio = pio0;
+    uint offset = pio_add_program(*pio, &pio_matrix_program);
+    *sm = pio_claim_unused_sm(*pio, true);
+    pio_matrix_program_init(*pio, *sm, offset, LED_PIN);
 }

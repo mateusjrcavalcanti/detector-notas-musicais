@@ -35,10 +35,13 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(detector-notas-musicais detector-notas-musicais.c libs/ssd1306.c)
+add_executable(detector-notas-musicais detector-notas-musicais.c libs/ssd1306.c libs/leds.c libs/animation.c)
 
 pico_set_program_name(detector-notas-musicais "detector-notas-musicais")
 pico_set_program_version(detector-notas-musicais "0.1")
+
+# PIO
+pico_generate_pio_header(detector-notas-musicais ${CMAKE_CURRENT_LIST_DIR}/pio_matrix.pio)
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(detector-notas-musicais 0)
@@ -50,6 +53,7 @@ target_link_libraries(detector-notas-musicais
         hardware_adc
         hardware_pwm
         hardware_i2c
+        hardware_pio
         )
 
 # Add the standard include files to the build

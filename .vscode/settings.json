@@ -39,6 +39,7 @@
     "files.associations": {
         "*.html": "html",
         "*.css": "css",
-        "notas.h": "c"
+        "notas.h": "c",
+        "pio_matrix.pio.h": "c"
     }
 }
