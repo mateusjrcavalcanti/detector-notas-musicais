@@ -28,7 +28,7 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
 
-project(a C CXX ASM)
+project(detector-notas-musicais C CXX ASM)
 
 # Initialise the Raspberry Pi Pico SDK
 pico_sdk_init()
@@ -46,7 +46,9 @@ pico_enable_stdio_usb(detector-notas-musicais 1)
 
 # Add the standard library to the build
 target_link_libraries(detector-notas-musicais
-        pico_stdlib)
+        pico_stdlib
+        hardware_adc
+        hardware_pwm)
 
 # Add the standard include files to the build
 target_include_directories(detector-notas-musicais PRIVATE
