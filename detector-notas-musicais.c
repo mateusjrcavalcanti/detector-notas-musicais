@@ -4,32 +4,64 @@
 #include "hardware/adc.h"
 #include "hardware/pwm.h"
 #include "libs/notas.h"
+#include "libs/ssd1306.h"
 
 #define SAMPLE_RATE 44100
 #define SAMPLES 1024
 #define MIC_PIN 28
 #define BUZZER_PIN 22
+#define I2C_PORT i2c1
+#define I2C_SDA 14
+#define I2C_SCL 15
+#define endereco 0x3C
+#define BUTTON_A 5
+#define BUTTON_B 6
 
 float magnitudes[SAMPLES / 2];
+ssd1306_t ssd;
+uint last_interrupt_a = 0;
+uint last_interrupt_b = 0;
+uint DEBOUNCE_MS = 200;
+
+enum TELAS
+{
+    MENU,
+    DETECTAR,
+    TOCAR
+};
+
+uint tela_atual = 0;
+float freq_dominante = 0;
+char *nota = "##";
 
 void fft(float *real, float *imag, int n);
 const char *detectar_nota(float freq);
 float interpolar_pico(int k, float *magnitudes);
 void buzzer_pwm(uint gpio, uint16_t frequency, uint16_t duration_ms);
+void setup_display();
+void setup_button(uint gpio);
+void gpio_irq_handler(uint gpio, uint32_t events);
+void enable_interrupt();
+void menu();
 
 int main()
 {
     stdio_init_all();
     adc_init();
     adc_gpio_init(MIC_PIN);
-    adc_select_input(2);
+    setup_display();
 
     float real[SAMPLES], imag[SAMPLES];
 
     while (true)
     {
+        menu();
+        adc_select_input(2);
         absolute_time_t inicio = get_absolute_time();
         float soma = 0;
+        setup_button(BUTTON_A);
+        setup_button(BUTTON_B);
+        enable_interrupt();
 
         for (int i = 0; i < SAMPLES; i++)
         {
@@ -59,8 +91,8 @@ int main()
             }
         }
 
-        float freq_dominante = interpolar_pico(freq_index, magnitudes) * SAMPLE_RATE / SAMPLES;
-        const char *nota = detectar_nota(freq_dominante);
+        freq_dominante = interpolar_pico(freq_index, magnitudes) * SAMPLE_RATE / SAMPLES;
+        nota = detectar_nota(freq_dominante);
 
         printf("🎶 Frequência: %.2f Hz - Nota: %s\n", freq_dominante, nota);
         buzzer_pwm(BUZZER_PIN, (uint16_t)freq_dominante, 500);
@@ -175,4 +207,102 @@ void buzzer_pwm(uint gpio, uint16_t frequency, uint16_t duration_ms)
     gpio_set_function(gpio, GPIO_FUNC_SIO);
     gpio_set_dir(gpio, GPIO_OUT);
     gpio_put(gpio, 0);
+}
+
+void setup_display()
+{
+    // Inicializa a I2c
+    i2c_init(I2C_PORT, 400 * 1000);
+
+    gpio_set_function(I2C_SDA, GPIO_FUNC_I2C);
+    gpio_set_function(I2C_SCL, GPIO_FUNC_I2C);
+    gpio_pull_up(I2C_SDA);
+    gpio_pull_up(I2C_SCL);
+    ssd1306_init(&ssd, WIDTH, HEIGHT, false, endereco, I2C_PORT);
+    ssd1306_config(&ssd);
+    ssd1306_send_data(&ssd);
+
+    ssd1306_fill(&ssd, false);
+    ssd1306_send_data(&ssd);
+}
+
+void menu()
+{
+    ssd1306_fill(&ssd, false);
+
+    if (tela_atual == MENU)
+    {
+        ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
+        ssd1306_draw_string(&ssd, "Bem vindo!", 8, 8);
+        ssd1306_draw_string(&ssd, "[A] Detectar", 8, 24);
+        ssd1306_draw_string(&ssd, "Nota", 8, 32);
+        ssd1306_draw_string(&ssd, "[B] Tocar Nota", 8, 48);
+    }
+    else if (tela_atual == DETECTAR)
+    {
+        char mensagem[32];
+        snprintf(mensagem, sizeof(mensagem), "Frq: %.2f Hz", freq_dominante);
+
+        char nota_mensagem[16];
+        snprintf(nota_mensagem, sizeof(nota_mensagem), "Nota: %s", nota);
+
+        ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
+        ssd1306_draw_string(&ssd, "DETECTANDO:", 8, 8);
+        ssd1306_draw_string(&ssd, mensagem, 8, 24);
+        ssd1306_draw_string(&ssd, nota_mensagem, 8, 32);
+        ssd1306_draw_string(&ssd, "[A] Para Voltar", 8, 48);
+    }
+    else if (tela_atual == TOCAR)
+    {
+        ssd1306_rect(&ssd, 3, 3, 122, 58, true, false);
+        ssd1306_draw_string(&ssd, "Tocando...", 8, 8);
+    }
+
+    ssd1306_send_data(&ssd);
+}
+
+void setup_button(uint gpio)
+{
+    gpio_init(gpio);
+    gpio_set_dir(gpio, GPIO_IN);
+    gpio_pull_up(gpio);
+}
+
+void gpio_irq_handler(uint gpio, uint32_t events)
+{
+    uint current_time = to_ms_since_boot(get_absolute_time());
+
+    if (gpio == BUTTON_A)
+    {
+        if (current_time - last_interrupt_a > DEBOUNCE_MS)
+        {
+            last_interrupt_a = current_time;
+            if (tela_atual == MENU)
+            {
+                tela_atual = DETECTAR;
+            }
+            else if (tela_atual == DETECTAR || tela_atual == TOCAR)
+            {
+                tela_atual = MENU;
+            }
+        }
+    }
+    if (gpio == BUTTON_B)
+    {
+        if (current_time - last_interrupt_b > DEBOUNCE_MS)
+        {
+            last_interrupt_b = current_time;
+
+            if (tela_atual == MENU)
+            {
+                tela_atual = TOCAR;
+            }
+        }
+    }
+}
+
+void enable_interrupt()
+{
+    gpio_set_irq_enabled_with_callback(BUTTON_A, GPIO_IRQ_EDGE_FALL, true, &gpio_irq_handler);
+    gpio_set_irq_enabled(BUTTON_B, GPIO_IRQ_EDGE_FALL, true);
 }
