@@ -102,7 +102,8 @@ Após a compilação, carregue o binário gerado na BitDogLab.
 ---
 
 ## 📽️ **Vídeo Demontrativo**
-
+https://youtu.be/gnJDQ8zU3XM?si=KRTcJCpqJXdxvo68
 ## 📄 **Documentação**
 https://github.com/limarich/detector-notas-musicais-atividade-final-embarcatech/blob/main/Sistema%20de%20An%C3%A1lise%20e%20Reprodu%C3%A7%C3%A3o%20de%20Notas%20Musicais%20Utilizando%20a%20BitdogLab.pdf
+---
 🚀 **Desenvolvido com tecnologia embarcada e paixão por música!** 🎶
