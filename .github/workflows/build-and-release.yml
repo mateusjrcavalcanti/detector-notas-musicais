@@ -1,0 +1,207 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v1.0.0, v2.1.3, etc.
+  workflow_dispatch:  # Allows manual trigger
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake gcc-arm-none-eabi libnewlib-arm-none-eabi build-essential ninja-build
+    
+    - name: Set up Pico SDK
+      run: |
+        cd /tmp
+        git clone --depth 1 --branch 2.1.1 https://github.com/raspberrypi/pico-sdk.git
+        cd pico-sdk
+        git submodule update --init
+        echo "PICO_SDK_PATH=/tmp/pico-sdk" >> $GITHUB_ENV
+    
+    - name: Create build directory
+      run: mkdir -p build
+    
+    - name: Configure CMake
+      run: |
+        cd build
+        cmake .. -DCMAKE_BUILD_TYPE=Release -DPICO_BOARD=pico_w
+    
+    - name: Build project
+      run: |
+        cd build
+        make -j$(nproc)
+    
+    - name: Verify build artifacts
+      run: |
+        ls -la build/
+        echo "=== Checking for required files ==="
+        test -f build/detector-notas-musicais.uf2 && echo "✅ UF2 file found" || echo "❌ UF2 file missing"
+        test -f build/detector-notas-musicais.elf && echo "✅ ELF file found" || echo "❌ ELF file missing"
+        test -f build/detector-notas-musicais.bin && echo "✅ BIN file found" || echo "❌ BIN file missing"
+        test -f build/detector-notas-musicais.hex && echo "✅ HEX file found" || echo "❌ HEX file missing"
+    
+    - name: Get version from tag or input
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "push" ]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="${{ github.event.inputs.version }}"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+    
+    - name: Create release archive
+      run: |
+        mkdir -p release-files
+        cp build/detector-notas-musicais.uf2 release-files/
+        cp build/detector-notas-musicais.elf release-files/
+        cp build/detector-notas-musicais.bin release-files/
+        cp build/detector-notas-musicais.hex release-files/
+        cp README.md release-files/
+        
+        # Create installation instructions
+        cat > release-files/INSTALACAO.md << 'EOF'
+        # 📋 Instruções de Instalação - Detector de Notas Musicais
+        
+        ## 🎯 Método 1: Instalação via UF2 (Recomendado)
+        
+        ### Pré-requisitos
+        - Placa BitDogLab (Raspberry Pi Pico W)
+        - Cabo USB
+        
+        ### Passos
+        1. **Conecte a placa em modo BOOTSEL:**
+           - Segure o botão BOOTSEL na placa
+           - Conecte o cabo USB ao computador
+           - Solte o botão BOOTSEL
+           - A placa aparecerá como um drive USB chamado "RPI-RP2"
+        
+        2. **Grave o firmware:**
+           - Copie o arquivo `detector-notas-musicais.uf2` para o drive "RPI-RP2"
+           - A placa reiniciará automaticamente e executará o programa
+        
+        ## 🔧 Método 2: Usando picotool
+        
+        ```bash
+        # Instale o picotool (se não tiver)
+        sudo apt install picotool
+        
+        # Grave o firmware
+        picotool load detector-notas-musicais.uf2 -fx
+        ```
+        
+        ## 📁 Arquivos Inclusos
+        
+        - `detector-notas-musicais.uf2` - **Arquivo principal para gravação**
+        - `detector-notas-musicais.elf` - Arquivo executável com símbolos de debug
+        - `detector-notas-musicais.bin` - Imagem binária do firmware
+        - `detector-notas-musicais.hex` - Arquivo em formato Intel HEX
+        - `README.md` - Documentação completa do projeto
+        
+        ## 🎵 Como Usar
+        
+        Após a instalação, o sistema estará pronto para:
+        - Detectar notas musicais através do microfone
+        - Exibir informações no display OLED
+        - Mostrar representação visual na matriz de LEDs
+        - Reproduzir as notas detectadas no buzzer
+        
+        ## 🆘 Resolução de Problemas
+        
+        - **Placa não aparece como "RPI-RP2":** Verifique se segurou o botão BOOTSEL corretamente
+        - **Erro ao copiar arquivo:** Certifique-se de que a placa está no modo BOOTSEL
+        - **Programa não executa:** Verifique se o arquivo .uf2 foi copiado completamente
+        
+        ---
+        
+        Para mais informações, consulte o README.md completo.
+        EOF
+        
+        # Create a zip archive
+        cd release-files
+        zip -r ../detector-notas-musicais-${{ steps.get_version.outputs.version }}.zip .
+        cd ..
+    
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        release_name: "Detector de Notas Musicais ${{ steps.get_version.outputs.version }}"
+        body: |
+          ## 🎵 Detector e Reprodutor de Notas Musicais - Release ${{ steps.get_version.outputs.version }}
+          
+          ### 📦 Arquivos para Download
+          
+          - **detector-notas-musicais.uf2** - Arquivo principal para gravação na placa (recomendado)
+          - **Pacote completo ZIP** - Todos os arquivos de firmware + documentação
+          
+          ### 🚀 Instalação Rápida
+          
+          1. Conecte a BitDogLab segurando o botão BOOTSEL
+          2. Copie o arquivo `.uf2` para o drive "RPI-RP2"
+          3. A placa reiniciará automaticamente
+          
+          ### ✨ Funcionalidades
+          
+          - 🎤 Detecção de notas musicais via microfone
+          - 📊 Análise FFT em tempo real
+          - 📺 Display das informações no OLED
+          - 💡 Representação visual na matriz de LEDs
+          - 🔊 Reprodução das notas no buzzer
+          
+          ### 📋 Instruções Detalhadas
+          
+          Consulte o arquivo `INSTALACAO.md` incluído no pacote ZIP para instruções completas.
+        draft: false
+        prerelease: false
+    
+    - name: Upload UF2 Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./release-files/detector-notas-musicais.uf2
+        asset_name: detector-notas-musicais.uf2
+        asset_content_type: application/octet-stream
+    
+    - name: Upload Complete Package
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./detector-notas-musicais-${{ steps.get_version.outputs.version }}.zip
+        asset_name: detector-notas-musicais-${{ steps.get_version.outputs.version }}-complete.zip
+        asset_content_type: application/zip
+    
+    - name: Upload Build Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-artifacts-${{ steps.get_version.outputs.version }}
+        path: |
+          build/detector-notas-musicais.uf2
+          build/detector-notas-musicais.elf
+          build/detector-notas-musicais.bin
+          build/detector-notas-musicais.hex
+        retention-days: 90

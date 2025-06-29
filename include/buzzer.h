@@ -24,4 +24,7 @@ void play_morse_code(const char *morse, uint gpio_buzzer_dot, uint gpio_buzzer_d
 // Emite um único tom no buzzer especificado
 void play_tone(uint gpio, uint frequency, uint duration_ms);
 
+// Função alternativa para tocar som usando toggle direto do GPIO
+void buzzer_tone_alt(uint gpio, uint16_t frequency, uint16_t duration_ms);
+
 #endif // BUZZER_H

@@ -23,7 +23,7 @@
             "command": "${env:HOME}/.pico-sdk/picotool/2.1.1/picotool/picotool",
             "args": [
                 "load",
-                "${command:raspberry-pi-pico.launchTargetPath}",
+                "${workspaceFolder}/build/detector-notas-musicais.uf2",
                 "-fx"
             ],
             "presentation": {
@@ -36,9 +36,24 @@
             }
         },
         {
+            "label": "Copy UF2 to Pico",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "-c",
+                "if [ -d '/media/$USER/RPI-RP2' ]; then cp '${workspaceFolder}/build/detector-notas-musicais.uf2' '/media/$USER/RPI-RP2/' && echo 'Arquivo copiado com sucesso!'; else echo 'Pico não encontrado em modo BOOTSEL. Conecte o Pico segurando o botão BOOTSEL.'; fi"
+            ],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
+        },
+        {
             "label": "Flash",
             "type": "process",
-            "command": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
+            "command": "${userHome}/.pico-sdk/openocd/0.12.0+dev/openocd",
             "args": [
                 "-s",
                 "${userHome}/.pico-sdk/openocd/0.12.0+dev/scripts",
@@ -53,6 +68,32 @@
             "windows": {
                 "command": "${env:USERPROFILE}/.pico-sdk/openocd/0.12.0+dev/openocd.exe",
             }
+        },
+        {
+            "label": "Clean Project",
+            "type": "process",
+            "command": "${userHome}/.pico-sdk/ninja/v1.12.1/ninja",
+            "args": ["-C", "${workspaceFolder}/build", "clean"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": [],
+            "windows": {
+                "command": "${env:USERPROFILE}/.pico-sdk/ninja/v1.12.1/ninja.exe"
+            }
+        },
+        {
+            "label": "Rebuild Project",
+            "dependsOrder": "sequence",
+            "dependsOn": ["Clean Project", "Compile Project"],
+            "group": "build",
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            },
+            "problemMatcher": []
         }
     ]
 }

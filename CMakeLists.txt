@@ -35,7 +35,10 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(detector-notas-musicais detector-notas-musicais.c libs/ssd1306.c libs/leds.c libs/animation.c libs/buzzer.c)
+# Coleta dinamicamente todos os arquivos .c da pasta src
+file(GLOB SRC_FILES "src/*.c")
+
+add_executable(detector-notas-musicais main.c ${SRC_FILES})
 
 pico_set_program_name(detector-notas-musicais "detector-notas-musicais")
 pico_set_program_version(detector-notas-musicais "0.1")
@@ -59,6 +62,7 @@ target_link_libraries(detector-notas-musicais
 # Add the standard include files to the build
 target_include_directories(detector-notas-musicais PRIVATE
         ${CMAKE_CURRENT_LIST_DIR}
+        ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
 # Add any user requested libraries

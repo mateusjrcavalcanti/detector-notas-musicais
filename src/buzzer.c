@@ -25,12 +25,21 @@ void buzzer_pwm(uint gpio, uint16_t frequency, uint16_t duration_ms)
     uint slice = pwm_gpio_to_slice_num(gpio);
     uint channel = pwm_gpio_to_channel(gpio);
 
-    // Define o divisor do clock PWM
-    float clock_div = 4.0f; // Ajustável para diferentes frequências
+    // Define o divisor do clock PWM baseado na frequência para melhor precisão
+    float clock_div;
+    if (frequency < 500) {
+        clock_div = 8.0f;  // Para frequências baixas (como notas musicais)
+    } else {
+        clock_div = 2.0f;  // Para frequências mais altas
+    }
     pwm_set_clkdiv(slice, clock_div);
 
-    // Calcula o valor de 'wrap' (período do PWM)
-    uint32_t wrap_value = (125000000 / (clock_div * frequency)) - 1;
+    // Calcula o valor de 'wrap' (período do PWM) com melhor precisão
+    uint32_t wrap_value = (uint32_t)((125000000.0f / (clock_div * frequency)) - 1);
+    
+    // Garante um valor mínimo para wrap_value
+    if (wrap_value < 10) wrap_value = 10;
+    
     pwm_set_wrap(slice, wrap_value);
 
     // Define o duty cycle para 50% (meio ciclo ligado, meio desligado)
@@ -82,4 +91,36 @@ void play_tone(uint gpio, uint frequency, uint duration_ms)
         gpio_put(gpio, 0);
         sleep_us(half_period);
     }
+}
+
+// Função alternativa para tocar som usando toggle direto do GPIO
+void buzzer_tone_alt(uint gpio, uint16_t frequency, uint16_t duration_ms)
+{
+    if (frequency == 0)
+        return;
+
+    // Configurar GPIO como saída
+    gpio_init(gpio);
+    gpio_set_dir(gpio, GPIO_OUT);
+    gpio_put(gpio, 0);
+
+    // Cálculos mais precisos para evitar problemas com frequências baixas
+    uint32_t period_us = 1000000 / frequency;
+    uint32_t half_period_us = period_us / 2;
+    
+    // Garantir que não temos valores muito pequenos
+    if (half_period_us < 10) half_period_us = 10;
+    
+    uint32_t cycles = (duration_ms * 1000) / period_us;
+
+    for (uint32_t i = 0; i < cycles; i++)
+    {
+        gpio_put(gpio, 1);
+        sleep_us(half_period_us);
+        gpio_put(gpio, 0);
+        sleep_us(half_period_us);
+    }
+    
+    // Garantir que o GPIO fica em LOW no final
+    gpio_put(gpio, 0);
 }
