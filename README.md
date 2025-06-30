@@ -502,7 +502,7 @@ note_t mapear_frequencia_para_nota(float frequencia) {
 
 ### **📈 Métricas de Desempenho**
 
-**⚠️ Nota: Os valores abaixo são estimativas teóricas baseadas nas especificações do hardware e precisam ser validados experimentalmente:**
+**⚠️ Nota: Os valores abaixo são estimativas teóricas baseadas nas especificações do hardware e precisam ser validadas experimentalmente:**
 
 - **Latência Total**: ~100-200ms (limitada pelo tamanho da janela de 512 amostras)
 - **Precisão de Detecção**: ±20-50 cents (limitada pela resolução da FFT e ruído do ADC)
@@ -537,53 +537,49 @@ note_t mapear_frequencia_para_nota(float frequencia) {
 
 ---
 
-## 🚀 **Automação e CI/CD**
+## 📚 Espectro de sinal
 
-Este projeto inclui automação completa para build e release usando **GitHub Actions**.
+O espectro de um sinal mostra como a energia do áudio está distribuída nas diferentes frequências. O sistema utiliza a FFT para transformar o sinal captado do microfone (domínio do tempo) para o domínio da frequência, permitindo identificar a nota musical predominante.
 
-### 📦 **Releases Automáticas**
+### 🎨 Galeria de Espectros das Notas Cromáticas
 
-Toda vez que uma nova tag de versão é criada, o sistema automaticamente:
+Abaixo estão os espectros gerados para cada uma das 12 notas cromáticas reconhecidas pelo sistema. Cada gráfico mostra a frequência fundamental (pico principal) e seus harmônicos:
 
-✅ **Compila o projeto** em ambiente Ubuntu com todas as dependências\
-✅ **Gera todos os formatos** necessários (.uf2, .elf, .bin, .hex)\
-✅ **Cria uma release** no GitHub com arquivos prontos\
-✅ **Inclui documentação** e instruções de instalação\
-✅ **Disponibiliza downloads** para usuários finais
+| Nota | Espectro |
+|------|----------|
+| Dó (C)      | ![](docs/espectro_C.png)   |
+| Dó# (C#)    | ![](docs/espectro_C#.png)  |
+| Ré (D)      | ![](docs/espectro_D.png)   |
+| Ré# (D#)    | ![](docs/espectro_D#.png)  |
+| Mi (E)      | ![](docs/espectro_E.png)   |
+| Fá (F)      | ![](docs/espectro_F.png)   |
+| Fá# (F#)    | ![](docs/espectro_F#.png)  |
+| Sol (G)     | ![](docs/espectro_G.png)   |
+| Sol# (G#)   | ![](docs/espectro_G#.png)  |
+| Lá (A)      | ![](docs/espectro_A.png)   |
+| Lá# (A#)    | ![](docs/espectro_A#.png)  |
+| Si (B)      | ![](docs/espectro_B.png)   |
 
-### 🎯 **Como Criar uma Release**
+Cada espectro foi gerado com sinal sintético contendo harmônicos, simulando o comportamento real de instrumentos musicais.
 
-#### Método 1: Script Automatizado (Recomendado)
-```bash
-# Execute o script helper
-./scripts/create-release.sh v1.0.0
-```
+O espectro de sinal é uma representação gráfica que mostra como a energia de um som está distribuída entre as diferentes frequências. No contexto deste projeto, ele é fundamental para identificar qual nota musical está presente no áudio captado pelo microfone.
 
-#### Método 2: Manual
-```bash
-# Crie e envie uma tag de versão
-git tag v1.0.0
-git push origin v1.0.0
-```
+Quando um som é capturado, ele está no domínio do tempo (variação do sinal ao longo dos segundos). Através da FFT (Transformada Rápida de Fourier), esse sinal é convertido para o domínio da frequência, revelando os componentes harmônicos e a frequência fundamental.
 
-#### Método 3: Interface Web
-1. Acesse a aba **Actions** no GitHub
-2. Execute **Build and Release** manualmente
-3. Digite a versão desejada
+- **Frequência fundamental:** É o pico principal do espectro, que corresponde à nota musical predominante.
+- **Harmônicos:** São múltiplos inteiros da frequência fundamental e aparecem como picos menores no gráfico. Eles dão o timbre característico de cada instrumento ou fonte sonora.
 
-### 📥 **Downloads Disponíveis**
+No projeto, o algoritmo busca o maior pico no espectro (após filtragem e janelamento), identifica sua frequência e faz o mapeamento para a nota musical mais próxima. Esse processo é feito em tempo real, permitindo a detecção instantânea da nota tocada ou cantada.
 
-Cada release inclui:
-- **detector-notas-musicais.uf2** - Arquivo principal para gravação
-- **Pacote ZIP completo** - Todos os formatos + documentação + instruções
-
-### 📋 **Para Desenvolvedores**
-
-Consulte [`.github/GITHUB_ACTIONS.md`](.github/GITHUB_ACTIONS.md) para:
-- Detalhes técnicos do workflow
-- Customização do processo
-- Resolução de problemas
-- Melhores práticas
+#### Exemplo prático:
+- Se o microfone captar um som puro de 440 Hz (Lá4), o espectro mostrará um pico acentuado exatamente nessa frequência.
+- Se o som for mais complexo (como uma voz ou instrumento), o espectro exibirá a frequência fundamental e vários harmônicos, mas o algoritmo sempre identifica a nota pela frequência fundamental.
 
 ---
+
+#### ℹ️ Sobre o eixo X dos gráficos
+
+O espectro de magnitude gerado mostra as frequências de 0 até metade da taxa de amostragem (22.050 Hz, para fs=44.100 Hz), conforme a teoria da FFT e a frequência de Nyquist. No entanto, para análise musical, apenas a faixa até 2.000 Hz é realmente relevante para a maioria dos instrumentos e vozes, pois abrange todas as notas musicais fundamentais e seus principais harmônicos. Por isso, os gráficos deste projeto são limitados a esse intervalo, facilitando a visualização dos picos e harmônicos das notas e tornando a análise mais didática.
+
+Se desejar visualizar uma faixa maior do espectro, basta ajustar o comando `plt.xlim(0, 2000)` no script de geração para outro valor, como 5000 Hz ou até o máximo permitido pela taxa de amostragem.
 

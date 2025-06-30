@@ -1,0 +1,52 @@
+name: Gerar e Commitar Espectros das Notas
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'generate_spectros.py'
+      - '.github/workflows/commit-espectros.yml'
+
+jobs:
+  gerar-e-commit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Instalar dependências Python
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install numpy matplotlib scipy
+
+      - name: Gerar espectros das notas
+        run: |
+          python3 generate_spectros.py
+
+      - name: Listar imagens geradas
+        run: |
+          ls -lh docs/*.png || echo "Nenhuma imagem gerada"
+
+      - name: Upload das imagens como artefato
+        uses: actions/upload-artifact@v4
+        with:
+          name: espectros-notas
+          path: docs/*.png
+          retention-days: 7
+
+      - name: Configurar Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Adicionar e commitar imagens geradas
+        run: |
+          git add docs/*.png
+          if git diff --cached --quiet; then
+            echo "Nenhuma imagem nova para commitar."
+            exit 0
+          fi
+          git commit -m "chore: atualizar espectros das notas gerados automaticamente [skip ci]"
+          git push
