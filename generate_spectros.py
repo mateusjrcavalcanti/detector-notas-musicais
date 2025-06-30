@@ -32,14 +32,16 @@ def gerar_espectro(freq, nome_nota):
     labels = ['Fundamental', '2º Harmônico', '3º Harmônico']
     for h, cor, lab in zip(harmonicos, cores, labels):
         plt.axvline(h, color=cor, linestyle='--', alpha=0.35, label=lab)
-        plt.text(h, plt.ylim()[1]*0.85, f'{h:.0f} Hz', color=cor, ha='center', fontsize=8, fontweight='bold', rotation=90, bbox=dict(facecolor='white', alpha=0.3, edgecolor='none', pad=0.5))
+        # Colocar o texto ao lado direito do pico
+        plt.text(h + 30, plt.ylim()[1]*0.7, f'{h:.0f} Hz', color=cor, ha='left', va='center', fontsize=8, fontweight='bold', rotation=0, bbox=dict(facecolor='white', alpha=0.3, edgecolor='none', pad=0.5))
 
-    # Anotar o valor do pico principal
+    # Anotar o valor do pico principal ao lado
     idx_fund = np.argmin(np.abs(xf[:len(xf)//2] - freq))
     mag_fund = np.abs(yf[:len(xf)//2])[idx_fund]
-    plt.annotate(f'Pico: {freq:.1f} Hz', xy=(freq, mag_fund), xytext=(freq+100, mag_fund*1.1),
+    plt.annotate(f'Pico: {freq:.1f} Hz', xy=(freq, mag_fund), xytext=(freq + 120, mag_fund),
                  arrowprops=dict(facecolor='red', alpha=0.3, shrink=0.05, width=1, headwidth=6),
-                 fontsize=9, color='red', fontweight='bold', bbox=dict(facecolor='white', alpha=0.3, edgecolor='none', pad=0.5))
+                 fontsize=9, color='red', fontweight='bold', va='center', ha='left',
+                 bbox=dict(facecolor='white', alpha=0.3, edgecolor='none', pad=0.5))
 
     plt.title(f"Espectro da Nota {nome_nota} ({freq} Hz)\nFundamental e Harmônicos destacados")
     plt.xlabel("Frequência (Hz)")
